@@ -29,6 +29,14 @@ DARK = (40, 35, 35)
 # second-highest platform low enough that only the top one can exit.
 EXIT_Y = 0
 
+# Wall bounce: leaning into a screen edge mid-air grants one bonus jump
+# per airtime, then shoves you off the wall. Glowing edges = ready.
+WALL_W = 10
+WALL_PUSH_SPEED = 350.0
+WALL_PUSH_TIME = 0.2
+WALL_READY = (120, 220, 255)
+WALL_SPENT = (60, 70, 90)
+
 # 5 hand-tuned climbs. Rules per layout: vertical steps <= ~100px
 # (jump reaches 160), horizontal gaps small, top platform near y~95,
 # second-highest at y>=170 so it can't trigger the exit by itself.
@@ -106,6 +114,43 @@ def enter_from_below(x):
     Caller keeps the rising vy, so momentum carries straight through.
     """
     return (max(CHAR_W / 2, min(WIDTH - CHAR_W / 2, x)), HEIGHT + 30)
+
+
+def wall_state(x):
+    """Which screen-edge wall is touched: -1 (left), +1 (right), 0 (none)."""
+    if x <= CHAR_W / 2:
+        return -1
+    if x >= WIDTH - CHAR_W / 2:
+        return 1
+    return 0
+
+
+def try_wall_bounce(on_ground, wall_dir, pressing_toward, ready):
+    """One bonus jump per airtime for leaning into a side wall.
+
+    Returns (bounced, new_vy). Never triggers on the ground.
+    """
+    if not on_ground and wall_dir != 0 and pressing_toward and ready:
+        return True, JUMP_VELOCITY
+    return False, None
+
+
+def draw_walls(screen, bounce_ready, tick):
+    """Edge indicators: bright pulsing bars + chevrons when armed."""
+    if bounce_ready:
+        k = 0.5 + 0.5 * math.sin(tick * 0.008)
+        col = tuple(min(255, c + int(45 * k)) for c in WALL_READY)
+    else:
+        col = WALL_SPENT
+    pygame.draw.rect(screen, col, (0, 0, WALL_W, HEIGHT))
+    pygame.draw.rect(screen, col, (WIDTH - WALL_W, 0, WALL_W, HEIGHT))
+    if bounce_ready:
+        for cy in range(80, HEIGHT, 120):
+            pygame.draw.polygon(screen, col,
+                                [(2, cy - 12), (2, cy + 12), (WALL_W + 6, cy)])
+            pygame.draw.polygon(screen, col,
+                                [(WIDTH - 2, cy - 12), (WIDTH - 2, cy + 12),
+                                 (WIDTH - WALL_W - 6, cy)])
 
 
 def char_rect(x, y):
@@ -222,6 +267,9 @@ def main():
     phase = 0.0
     amp = 0.0
     facing = 1
+    push_t = 0.0
+    push_dir = 0
+    bounce_ready = True
     won = False
 
     running = True
@@ -238,6 +286,8 @@ def main():
                 level_idx = 0
                 x, y = load_level(0)
                 vy = 0.0
+                bounce_ready = True
+                push_t = 0.0
                 won = False
             screen.fill((20, 40, 30))
             msg = big.render("YOU MADE IT!", True, (140, 230, 150))
@@ -249,12 +299,17 @@ def main():
             continue
 
         vx = 0.0
-        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+        left = keys[pygame.K_LEFT] or keys[pygame.K_a]
+        right = keys[pygame.K_RIGHT] or keys[pygame.K_d]
+        if left:
             vx = -MOVE_SPEED
             facing = -1
-        if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+        if right:
             vx = MOVE_SPEED
             facing = 1
+        if push_t > 0:
+            vx += push_dir * WALL_PUSH_SPEED
+            push_t -= dt
         if (keys[pygame.K_SPACE] or keys[pygame.K_w]
                 or keys[pygame.K_UP]) and on_ground:
             vy = JUMP_VELOCITY
@@ -262,6 +317,9 @@ def main():
         if keys[pygame.K_r]:
             (x, y) = stage_spawn(level_idx)
             vy = 0.0
+            on_ground = True
+            bounce_ready = True
+            push_t = 0.0
 
         target = 1.0 if (vx != 0 and on_ground) else 0.0
         amp += (target - amp) * min(1.0, dt * 10)
@@ -286,6 +344,8 @@ def main():
                 load_level(level_idx)
                 (x, y) = enter_from_below(x)
                 on_ground = False
+                bounce_ready = True
+                push_t = 0.0
 
         # no floor past stage 1: fall out the bottom -> previous stage
         if not won and level_idx > 0 and y - CHAR_H > HEIGHT:
@@ -294,10 +354,28 @@ def main():
             (x, y) = enter_from_above(x)
             vy = 0.0
             on_ground = False
+            bounce_ready = True
+            push_t = 0.0
 
         x = max(CHAR_W / 2, min(WIDTH - CHAR_W / 2, x))
 
+        # wall bounce: leaning into an edge mid-air grants one more jump
+        touching = wall_state(x)
+        pressing = (touching == -1 and left) or (touching == 1 and right)
+        bounced, bvy = try_wall_bounce(on_ground, touching, pressing,
+                                       bounce_ready)
+        if bounced:
+            vy = bvy
+            push_dir = -touching
+            push_t = WALL_PUSH_TIME
+            bounce_ready = False
+            facing = -touching
+        if on_ground:
+            bounce_ready = True
+            push_t = 0.0
+
         screen.fill((30, 30, 30))
+        draw_walls(screen, bounce_ready, pygame.time.get_ticks())
         if has_floor(level_idx):
             pygame.draw.line(screen, (100, 100, 100),
                              (0, GROUND_Y), (WIDTH, GROUND_Y), 3)
@@ -308,10 +386,13 @@ def main():
         tag = hud.render("Stage %d/5 - %s" % (level_idx + 1, lvl["name"]),
                          True, (200, 200, 200))
         screen.blit(tag, (12, 10))
+        bounce_hint = hud.render("Lean into a glowing wall mid-air: bounce jump",
+                                 True, (140, 210, 240))
+        screen.blit(bounce_hint, (12, 40))
         if not has_floor(level_idx):
             hint = hud.render("No floor - falling drops a stage!",
                               True, (230, 170, 120))
-            screen.blit(hint, (12, 40))
+            screen.blit(hint, (12, 70))
         pygame.display.flip()
 
     pygame.quit()
