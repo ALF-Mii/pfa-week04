@@ -42,4 +42,4 @@ python ball_game.py
   `screen.fill(stage_bg_color(level_idx))`.
 
   ## Recording
-  
+  https://drive.google.com/file/d/1NW3cdOSg6hFG_35Mmldz6XKkeuK-Lvw5/view?usp=sharing
