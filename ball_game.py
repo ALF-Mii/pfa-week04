@@ -331,6 +331,17 @@ def win_time_left_ms(start_ms, now_ms, duration_ms=WIN_DURATION_MS):
     return max(0, duration_ms - (now_ms - start_ms))
 
 
+def stage_bg_color(idx):
+    """Background color per grief stage, dark to dawn."""
+    return [
+        (30, 30, 30),    # Denial: flat grey
+        (60, 25, 25),    # Anger: dark red
+        (35, 25, 60),    # Bargaining: restless purple
+        (12, 15, 30),    # Depression: near-black blue
+        (55, 45, 50),    # Acceptance: warm dawn
+    ][idx % 5]
+
+
 def draw_character(screen, x, y, facing, swing, cling=0):
     """Draw the kid anchored at feet (x, y). swing in [-1, 1] walk cycle.
 
@@ -540,7 +551,7 @@ def main():
             latched = False
             push_t = 0.0
 
-        screen.fill((30, 30, 30))
+        screen.fill(stage_bg_color(level_idx))
         draw_walls(screen, latch_ready, pygame.time.get_ticks(), latched)
         if has_floor(level_idx):
             pygame.draw.line(screen, (100, 100, 100),
