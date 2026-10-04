@@ -1,5 +1,6 @@
 """Chibi climber: 5 stages, exit past the top edge (pygame)."""
 import math
+import random
 
 import pygame
 
@@ -28,6 +29,12 @@ DARK = (40, 35, 35)
 # Exit past the top edge: feet above y=0. Every level keeps its
 # second-highest platform low enough that only the top one can exit.
 EXIT_Y = 0
+
+# Victory: 45s celebration, then the window closes itself.
+WIN_DURATION_MS = 45000
+CONFETTI_N = 150
+CONFETTI_COLORS = [(255, 80, 80), (255, 200, 60), (120, 220, 120),
+                   (120, 180, 255), (220, 130, 255), (255, 255, 255)]
 
 # Wall latch + spring: hold into a screen edge mid-air to cling for up
 # to 0.5s, then SPACE springs off — mostly upward, shoved away from the
@@ -283,6 +290,47 @@ def jump_apex(x, y_start):
     return top
 
 
+def spawn_confetti(top=False):
+    """One confetti piece. top=True respawns it just above the screen."""
+    return {
+        "x": random.uniform(0, WIDTH),
+        "y": random.uniform(-20, -5) if top else random.uniform(0, HEIGHT),
+        "vy": random.uniform(120, 320),
+        "sway": random.uniform(30, 90),
+        "phase": random.uniform(0, 6.28),
+        "t": random.uniform(0, 100),
+        "w": random.randint(4, 8),
+        "h": random.randint(6, 12),
+        "color": random.choice(CONFETTI_COLORS),
+    }
+
+
+def step_confetti(parts, dt):
+    """Fall + sway the pieces; recycle fallen ones back to the top."""
+    for p in parts:
+        p["t"] += dt
+        p["y"] += p["vy"] * dt
+        p["x"] += math.sin(p["t"] * 3 + p["phase"]) * p["sway"] * dt
+        if p["x"] < -20:
+            p["x"] = WIDTH + 10
+        elif p["x"] > WIDTH + 20:
+            p["x"] = -10
+        if p["y"] > HEIGHT + 15:
+            p.update(spawn_confetti(top=True))
+    return parts
+
+
+def draw_confetti(screen, parts):
+    for p in parts:
+        pygame.draw.rect(screen, p["color"],
+                         (int(p["x"]), int(p["y"]), p["w"], p["h"]))
+
+
+def win_time_left_ms(start_ms, now_ms, duration_ms=WIN_DURATION_MS):
+    """Ms left on the victory screen, floored at 0 (window closes at 0)."""
+    return max(0, duration_ms - (now_ms - start_ms))
+
+
 def draw_character(screen, x, y, facing, swing, cling=0):
     """Draw the kid anchored at feet (x, y). swing in [-1, 1] walk cycle.
 
@@ -334,7 +382,7 @@ def main():
     pygame.display.set_caption("Chibi Climber — 5 Stages")
     clock = pygame.time.Clock()
     hud = pygame.font.SysFont(None, 32)
-    big = pygame.font.SysFont(None, 72)
+    win_font = pygame.font.SysFont(None, 120)
 
     level_idx = 0
     x, y = load_level(0)
@@ -352,6 +400,8 @@ def main():
     latch_t = 0.0
     latch_dir = 0
     won = False
+    win_start = 0
+    confetti = []
 
     running = True
     while running:
@@ -363,20 +413,36 @@ def main():
 
         keys = pygame.key.get_pressed()
         if won:
+            now = pygame.time.get_ticks()
             if keys[pygame.K_r]:
                 level_idx = 0
                 x, y = load_level(0)
+                x, y = stage_spawn(0)
                 vy = 0.0
+                on_ground = True
                 latch_ready = True
                 latched = False
                 push_t = 0.0
                 won = False
-            screen.fill((20, 40, 30))
-            msg = big.render("YOU MADE IT!", True, (140, 230, 150))
-            sub = hud.render("Climbed all 5 stages - press R to play again",
+                continue
+            if win_time_left_ms(win_start, now) <= 0:
+                running = False
+                continue
+            step_confetti(confetti, dt)
+            screen.fill((15, 15, 25))
+            draw_confetti(screen, confetti)
+            if (now // 400) % 2 == 0:  # flashing red, ~1.25 Hz
+                msg = win_font.render("VICTORY", True, (255, 45, 45))
+                screen.blit(msg,
+                            msg.get_rect(center=(WIDTH / 2, HEIGHT / 2 - 20)))
+            sub = hud.render("Acceptance reached - R to climb again",
                              True, (200, 200, 200))
-            screen.blit(msg, msg.get_rect(center=(WIDTH / 2, HEIGHT / 2 - 20)))
-            screen.blit(sub, sub.get_rect(center=(WIDTH / 2, HEIGHT / 2 + 40)))
+            screen.blit(sub, sub.get_rect(center=(WIDTH / 2, HEIGHT / 2 + 60)))
+            left_s = win_time_left_ms(win_start, now) // 1000
+            timer = hud.render("Closing in %ds..." % left_s, True,
+                               (150, 150, 150))
+            screen.blit(timer, timer.get_rect(center=(WIDTH / 2,
+                                                       HEIGHT / 2 + 100)))
             pygame.display.flip()
             continue
 
@@ -424,6 +490,8 @@ def main():
             level_idx += 1
             if level_idx >= len(LEVELS):
                 won = True
+                win_start = pygame.time.get_ticks()
+                confetti = [spawn_confetti() for _ in range(CONFETTI_N)]
             else:
                 load_level(level_idx)
                 (x, y) = enter_from_below(x)
