@@ -40,3 +40,6 @@ python ball_game.py
   background color, dark grey through to a warm dawn. Hand-written by me:
   I picked every RGB value and wired it into `main` via
   `screen.fill(stage_bg_color(level_idx))`.
+
+  ## Recording
+  
