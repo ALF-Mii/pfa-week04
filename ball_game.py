@@ -29,13 +29,14 @@ DARK = (40, 35, 35)
 # second-highest platform low enough that only the top one can exit.
 EXIT_Y = 0
 
-# Wall bounce: leaning into a screen edge mid-air grants one bonus jump
-# per airtime, then shoves you off the wall. The shove beats run speed so
-# the arc leaves the wall even while still holding toward it.
-# Glowing edges = ready.
+# Wall latch + spring: hold into a screen edge mid-air to cling for up
+# to 0.5s, then SPACE springs off — mostly upward, shoved away from the
+# wall. Into-wall steering is ignored during the shove so the arc always
+# leaves the wall. One latch per airtime. Glowing edges = ready.
 WALL_W = 10
-WALL_PUSH_SPEED = 600.0
-WALL_PUSH_TIME = 0.25
+LATCH_TIME = 0.5
+WALL_PUSH_SPEED = 350.0
+WALL_PUSH_TIME = 0.22
 WALL_READY = (120, 220, 255)
 WALL_SPENT = (60, 70, 90)
 
@@ -127,30 +128,35 @@ def wall_state(x):
     return 0
 
 
-def try_wall_bounce(on_ground, wall_dir, pressing_toward, ready):
-    """One bonus jump per airtime for leaning into a side wall.
+def try_wall_latch(on_ground, latched, wall_dir, pressing_toward, ready):
+    """Start clinging to the wall. One latch per airtime, never grounded."""
+    return (not on_ground and not latched and wall_dir != 0
+            and pressing_toward and ready)
 
-    Returns (bounced, new_vy). Never triggers on the ground.
+
+def apply_push(vx_key, bonus, push_dir):
+    """Merge key steering with the wall-spring shove.
+
+    Into-wall steering is dropped during the shove so the arc always
+    leaves the wall; with-the-push steering still adds on top.
     """
-    if not on_ground and wall_dir != 0 and pressing_toward and ready:
-        return True, JUMP_VELOCITY
-    return False, None
+    if bonus != 0.0 and vx_key * push_dir < 0:
+        return bonus
+    return vx_key + bonus
 
 
 def bounce_push(push_t, push_dir, dt):
-    """Wall-bounce shove: (vx_bonus, new_push_t).
-
-    Stronger than MOVE_SPEED, so the bounce arcs away from the wall
-    even if the player keeps holding toward it.
-    """
+    """Wall-spring shove: (vx_bonus, new_push_t). Mostly-up arc helper."""
     if push_t > 0:
         return push_dir * WALL_PUSH_SPEED, max(0.0, push_t - dt)
     return 0.0, push_t
 
 
-def draw_walls(screen, bounce_ready, tick):
+def draw_walls(screen, bounce_ready, tick, latched=False):
     """Edge indicators: bright pulsing bars + chevrons when armed."""
-    if bounce_ready:
+    if latched:
+        col = (255, 255, 255)
+    elif bounce_ready:
         k = 0.5 + 0.5 * math.sin(tick * 0.008)
         col = tuple(min(255, c + int(45 * k)) for c in WALL_READY)
     else:
@@ -225,8 +231,11 @@ def jump_apex(x, y_start):
     return top
 
 
-def draw_character(screen, x, y, facing, swing):
-    """Draw the kid anchored at feet (x, y). swing in [-1, 1] walk cycle."""
+def draw_character(screen, x, y, facing, swing, cling=0):
+    """Draw the kid anchored at feet (x, y). swing in [-1, 1] walk cycle.
+
+    cling: -1/0/+1, arms reach up toward the latched wall while set.
+    """
     hip_y = y - LEG_LEN
     shoulder_y = hip_y - TORSO_H + 4
     head_cy = shoulder_y - HEAD_R + 4
@@ -243,12 +252,16 @@ def draw_character(screen, x, y, facing, swing):
                      (x - TORSO_W / 2, hip_y - TORSO_H, TORSO_W, TORSO_H),
                      border_radius=6)
 
-    # arms (swing opposite to same-side leg)
+    # arms (swing opposite to same-side leg; reach up while clinging)
     for side in (-1, 1):
-        sway = int(math.sin(swing) * 6) * side
+        if cling != 0:
+            hand = (x + cling * 18 + side * 4, shoulder_y - 22)
+        else:
+            sway = int(math.sin(swing) * 6) * side
+            hand = (x + side * 20 - sway, shoulder_y + 16)
         pygame.draw.line(screen, SKIN,
                          (x + side * (TORSO_W / 2 - 2), shoulder_y),
-                         (x + side * 20 - sway, shoulder_y + 16), 7)
+                         hand, 7)
 
     # big head
     pygame.draw.circle(screen, SKIN, (int(x), int(head_cy)), HEAD_R)
@@ -282,7 +295,10 @@ def main():
     facing = 1
     push_t = 0.0
     push_dir = 0
-    bounce_ready = True
+    latch_ready = True
+    latched = False
+    latch_t = 0.0
+    latch_dir = 0
     won = False
 
     running = True
@@ -299,7 +315,8 @@ def main():
                 level_idx = 0
                 x, y = load_level(0)
                 vy = 0.0
-                bounce_ready = True
+                latch_ready = True
+                latched = False
                 push_t = 0.0
                 won = False
             screen.fill((20, 40, 30))
@@ -320,31 +337,34 @@ def main():
         if right:
             vx = MOVE_SPEED
             facing = 1
+        jump_pressed = (keys[pygame.K_SPACE] or keys[pygame.K_w]
+                        or keys[pygame.K_UP])
         bonus, push_t = bounce_push(push_t, push_dir, dt)
-        vx += bonus
-        if (keys[pygame.K_SPACE] or keys[pygame.K_w]
-                or keys[pygame.K_UP]) and on_ground:
+        vx = apply_push(vx, bonus, push_dir)
+        if jump_pressed and on_ground and not latched:
             vy = JUMP_VELOCITY
             on_ground = False
         if keys[pygame.K_r]:
             (x, y) = stage_spawn(level_idx)
             vy = 0.0
             on_ground = True
-            bounce_ready = True
+            latch_ready = True
+            latched = False
             push_t = 0.0
 
         target = 1.0 if (vx != 0 and on_ground) else 0.0
         amp += (target - amp) * min(1.0, dt * 10)
         phase += abs(vx) * dt * 0.045
 
-        vy += GRAVITY * dt
-        x, y, vy, landed = move_and_collide(x, y, vx, vy, dt)
-        on_ground = landed
+        if not latched:
+            vy += GRAVITY * dt
+            x, y, vy, landed = move_and_collide(x, y, vx, vy, dt)
+            on_ground = landed
 
-        if has_floor(level_idx) and y >= GROUND_Y:
-            y = GROUND_Y
-            vy = 0.0
-            on_ground = True
+            if has_floor(level_idx) and y >= GROUND_Y:
+                y = GROUND_Y
+                vy = 0.0
+                on_ground = True
 
         # exit past the top edge -> fly into the next stage from below
         # with position and upward momentum kept; land it yourself
@@ -356,7 +376,8 @@ def main():
                 load_level(level_idx)
                 (x, y) = enter_from_below(x)
                 on_ground = False
-                bounce_ready = True
+                latch_ready = True
+                latched = False
                 push_t = 0.0
 
         # no floor past stage 1: fall out the bottom -> previous stage
@@ -366,39 +387,53 @@ def main():
             (x, y) = enter_from_above(x)
             vy = 0.0
             on_ground = False
-            bounce_ready = True
+            latch_ready = True
+            latched = False
             push_t = 0.0
 
         x = max(CHAR_W / 2, min(WIDTH - CHAR_W / 2, x))
 
-        # wall bounce: leaning into an edge mid-air grants one more jump
+        # wall latch: hold into an edge mid-air to cling, SPACE to spring
+        # off (mostly up, shoved away). Runs out after LATCH_TIME or let-go.
         touching = wall_state(x)
         pressing = (touching == -1 and left) or (touching == 1 and right)
-        bounced, bvy = try_wall_bounce(on_ground, touching, pressing,
-                                       bounce_ready)
-        if bounced:
-            vy = bvy
-            push_dir = -touching
-            push_t = WALL_PUSH_TIME
-            bounce_ready = False
-            facing = -touching
+        if try_wall_latch(on_ground, latched, touching, pressing,
+                          latch_ready):
+            latched, latch_t, latch_dir = True, LATCH_TIME, touching
+            vy = 0.0
+            facing = touching
+        if latched:
+            latch_t -= dt
+            vy = 0.0
+            if jump_pressed:
+                vy = JUMP_VELOCITY
+                push_dir = -latch_dir
+                push_t = WALL_PUSH_TIME
+                latched = False
+                latch_ready = False
+                facing = -latch_dir
+            elif latch_t <= 0 or not pressing:
+                latched = False
+                latch_ready = False
         if on_ground:
-            bounce_ready = True
+            latch_ready = True
+            latched = False
             push_t = 0.0
 
         screen.fill((30, 30, 30))
-        draw_walls(screen, bounce_ready, pygame.time.get_ticks())
+        draw_walls(screen, latch_ready, pygame.time.get_ticks(), latched)
         if has_floor(level_idx):
             pygame.draw.line(screen, (100, 100, 100),
                              (0, GROUND_Y), (WIDTH, GROUND_Y), 3)
         for o in OBSTACLES:
             pygame.draw.rect(screen, (70, 130, 180), o)
-        draw_character(screen, x, y, facing, phase if amp > 0.05 else 0.0)
+        draw_character(screen, x, y, facing, phase if amp > 0.05 else 0.0,
+                       latch_dir if latched else 0)
         lvl = LEVELS[level_idx]
         tag = hud.render("Stage %d/5 - %s" % (level_idx + 1, lvl["name"]),
                          True, (200, 200, 200))
         screen.blit(tag, (12, 10))
-        bounce_hint = hud.render("Lean into a glowing wall mid-air: bounce jump",
+        bounce_hint = hud.render("Hold into a wall to latch - SPACE springs off",
                                  True, (140, 210, 240))
         screen.blit(bounce_hint, (12, 40))
         if not has_floor(level_idx):
