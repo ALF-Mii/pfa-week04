@@ -1,4 +1,4 @@
-"""Chibi character: big head, small body, arms + legs (pygame)."""
+"""Chibi climber: 5 stages, exit past the top edge (pygame)."""
 import math
 
 import pygame
@@ -10,6 +10,7 @@ MOVE_SPEED = 400        # px/sec
 GRAVITY = 2000.0        # px/sec^2
 JUMP_VELOCITY = -800.0  # px/sec (negative = up)
 GROUND_Y = HEIGHT - 60
+JUMP_HEIGHT = JUMP_VELOCITY ** 2 / (2 * GRAVITY)  # ~160px max rise
 
 # Proportions: oversized head, tiny torso -> small-child look.
 HEAD_R = 24
@@ -24,15 +25,58 @@ SHIRT = (90, 150, 220)
 PANTS = (60, 60, 75)
 DARK = (40, 35, 35)
 
-# Solid platforms / blocks. Feet land on top, head bonks underneath,
-# body is blocked from the sides.
-OBSTACLES = [
-    pygame.Rect(120, 440, 140, 24),
-    pygame.Rect(340, 350, 140, 24),
-    pygame.Rect(560, 440, 140, 24),
-    pygame.Rect(340, 180, 140, 24),
-    pygame.Rect(620, 250, 40, 170),  # tall block
+# Exit past the top edge: feet above y=0. Every level keeps its
+# second-highest platform low enough that only the top one can exit.
+EXIT_Y = 0
+
+# 5 hand-tuned climbs. Rules per layout: vertical steps <= ~100px
+# (jump reaches 160), horizontal gaps small, top platform near y~95,
+# second-highest at y>=170 so it can't trigger the exit by itself.
+LEVELS = [
+    {"name": "First Steps",
+     "platforms": [(60, 450, 200, 24), (330, 350, 200, 24),
+                   (560, 250, 180, 24), (330, 170, 180, 24),
+                   (90, 90, 180, 24)],
+     "blocks": []},
+    {"name": "Zigzag",
+     "platforms": [(560, 455, 150, 24), (370, 360, 150, 24),
+                   (150, 265, 150, 24), (370, 175, 150, 24),
+                   (580, 95, 150, 24)],
+     "blocks": []},
+    {"name": "The Wall",
+     "platforms": [(60, 450, 140, 24), (240, 350, 140, 24),
+                   (60, 250, 140, 24), (250, 210, 140, 24),
+                   (450, 170, 140, 24), (600, 95, 130, 24)],
+     "blocks": [(380, 300, 40, 240)]},
+    {"name": "Skinny",
+     "platforms": [(80, 445, 120, 24), (300, 345, 120, 24),
+                   (520, 250, 120, 24), (300, 175, 120, 24),
+                   (90, 95, 120, 24)],
+     "blocks": [(500, 400, 36, 140)]},
+    {"name": "Summit",
+     "platforms": [(620, 450, 110, 24), (430, 350, 110, 24),
+                   (240, 260, 110, 24), (430, 180, 110, 24),
+                   (620, 95, 110, 24)],
+     "blocks": []},
 ]
+
+# Active solid geometry; rebuilt by load_level().
+OBSTACLES = []
+
+
+def load_level(idx):
+    """Load LEVELS[idx] into OBSTACLES. Returns spawn (x, y)."""
+    global OBSTACLES
+    lvl = LEVELS[idx]
+    OBSTACLES = ([pygame.Rect(*p) for p in lvl["platforms"]]
+                 + [pygame.Rect(*b) for b in lvl["blocks"]])
+    return SPAWN
+
+
+def top_two_platforms(idx):
+    """(highest_top, second_highest_top) for exit-margin checks."""
+    tops = sorted(p[1] for p in LEVELS[idx]["platforms"])
+    return tops[0], tops[1]
 
 
 def char_rect(x, y):
@@ -82,6 +126,18 @@ def move_and_collide(x, y, vx, vy, dt):
     return x, y, vy, on_ground
 
 
+def jump_apex(x, y_start):
+    """Feet height at jump apex from a standstill jump (for tests)."""
+    y, vy, top = y_start, JUMP_VELOCITY, y_start
+    for _ in range(300):
+        vy += GRAVITY / 60
+        x, y, vy, _ = move_and_collide(x, y, 0.0, vy, 1 / 60)
+        top = min(top, y)
+        if vy >= 0:
+            break
+    return top
+
+
 def draw_character(screen, x, y, facing, swing):
     """Draw the kid anchored at feet (x, y). swing in [-1, 1] walk cycle."""
     hip_y = y - LEG_LEN
@@ -123,16 +179,20 @@ def draw_character(screen, x, y, facing, swing):
 def main():
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption("Chibi Move + Jump")
+    pygame.display.set_caption("Chibi Climber — 5 Stages")
     clock = pygame.time.Clock()
+    hud = pygame.font.SysFont(None, 32)
+    big = pygame.font.SysFont(None, 72)
 
-    x, y = SPAWN
+    level_idx = 0
+    x, y = load_level(0)
     vx = 0.0
     vy = 0.0
     on_ground = True
     phase = 0.0
     amp = 0.0
     facing = 1
+    won = False
 
     running = True
     while running:
@@ -143,6 +203,21 @@ def main():
                 running = False
 
         keys = pygame.key.get_pressed()
+        if won:
+            if keys[pygame.K_r]:
+                level_idx = 0
+                x, y = load_level(0)
+                vy = 0.0
+                won = False
+            screen.fill((20, 40, 30))
+            msg = big.render("YOU MADE IT!", True, (140, 230, 150))
+            sub = hud.render("Climbed all 5 stages - press R to play again",
+                             True, (200, 200, 200))
+            screen.blit(msg, msg.get_rect(center=(WIDTH / 2, HEIGHT / 2 - 20)))
+            screen.blit(sub, sub.get_rect(center=(WIDTH / 2, HEIGHT / 2 + 40)))
+            pygame.display.flip()
+            continue
+
         vx = 0.0
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
             vx = -MOVE_SPEED
@@ -158,7 +233,6 @@ def main():
             (x, y) = SPAWN
             vy = 0.0
 
-        # walk-cycle blend: 1 while moving on ground, else decay to 0
         target = 1.0 if (vx != 0 and on_ground) else 0.0
         amp += (target - amp) * min(1.0, dt * 10)
         phase += abs(vx) * dt * 0.045
@@ -172,6 +246,16 @@ def main():
             vy = 0.0
             on_ground = True
 
+        # exit past the top edge -> next stage
+        if y < EXIT_Y:
+            level_idx += 1
+            if level_idx >= len(LEVELS):
+                won = True
+            else:
+                x, y = load_level(level_idx)
+                vy = 0.0
+                on_ground = False
+
         x = max(CHAR_W / 2, min(WIDTH - CHAR_W / 2, x))
 
         screen.fill((30, 30, 30))
@@ -180,6 +264,10 @@ def main():
         for o in OBSTACLES:
             pygame.draw.rect(screen, (70, 130, 180), o)
         draw_character(screen, x, y, facing, phase if amp > 0.05 else 0.0)
+        lvl = LEVELS[level_idx]
+        tag = hud.render("Stage %d/5 - %s" % (level_idx + 1, lvl["name"]),
+                         True, (200, 200, 200))
+        screen.blit(tag, (12, 10))
         pygame.display.flip()
 
     pygame.quit()
