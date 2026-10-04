@@ -79,6 +79,24 @@ def top_two_platforms(idx):
     return tops[0], tops[1]
 
 
+def has_floor(idx):
+    """Only the first stage has a floor; later stages are void below."""
+    return idx == 0
+
+
+def stage_spawn(idx):
+    """Safe start point for a stage: the ground, or its lowest platform."""
+    if idx == 0:
+        return SPAWN
+    lowest = max(LEVELS[idx]["platforms"], key=lambda p: p[1])
+    return (lowest[0] + lowest[2] / 2, lowest[1])
+
+
+def enter_from_above(x):
+    """Re-entry when falling back a stage: drop in from the top edge."""
+    return (max(CHAR_W / 2, min(WIDTH - CHAR_W / 2, x)), 30)
+
+
 def char_rect(x, y):
     """Collision box for feet-anchored position (x, y)."""
     return pygame.Rect(x - CHAR_W / 2, y - CHAR_H, CHAR_W, CHAR_H)
@@ -186,6 +204,7 @@ def main():
 
     level_idx = 0
     x, y = load_level(0)
+    x, y = stage_spawn(0)
     vx = 0.0
     vy = 0.0
     on_ground = True
@@ -230,7 +249,7 @@ def main():
             vy = JUMP_VELOCITY
             on_ground = False
         if keys[pygame.K_r]:
-            (x, y) = SPAWN
+            (x, y) = stage_spawn(level_idx)
             vy = 0.0
 
         target = 1.0 if (vx != 0 and on_ground) else 0.0
@@ -241,26 +260,36 @@ def main():
         x, y, vy, landed = move_and_collide(x, y, vx, vy, dt)
         on_ground = landed
 
-        if y >= GROUND_Y:
+        if has_floor(level_idx) and y >= GROUND_Y:
             y = GROUND_Y
             vy = 0.0
             on_ground = True
 
-        # exit past the top edge -> next stage
+        # exit past the top edge -> next stage, starting on its base
         if y < EXIT_Y:
             level_idx += 1
             if level_idx >= len(LEVELS):
                 won = True
             else:
-                x, y = load_level(level_idx)
+                load_level(level_idx)
+                (x, y) = stage_spawn(level_idx)
                 vy = 0.0
-                on_ground = False
+                on_ground = True
+
+        # no floor past stage 1: fall out the bottom -> previous stage
+        if not won and level_idx > 0 and y - CHAR_H > HEIGHT:
+            level_idx -= 1
+            load_level(level_idx)
+            (x, y) = enter_from_above(x)
+            vy = 0.0
+            on_ground = False
 
         x = max(CHAR_W / 2, min(WIDTH - CHAR_W / 2, x))
 
         screen.fill((30, 30, 30))
-        pygame.draw.line(screen, (100, 100, 100),
-                         (0, GROUND_Y), (WIDTH, GROUND_Y), 3)
+        if has_floor(level_idx):
+            pygame.draw.line(screen, (100, 100, 100),
+                             (0, GROUND_Y), (WIDTH, GROUND_Y), 3)
         for o in OBSTACLES:
             pygame.draw.rect(screen, (70, 130, 180), o)
         draw_character(screen, x, y, facing, phase if amp > 0.05 else 0.0)
@@ -268,6 +297,10 @@ def main():
         tag = hud.render("Stage %d/5 - %s" % (level_idx + 1, lvl["name"]),
                          True, (200, 200, 200))
         screen.blit(tag, (12, 10))
+        if not has_floor(level_idx):
+            hint = hud.render("No floor - falling drops a stage!",
+                              True, (230, 170, 120))
+            screen.blit(hint, (12, 40))
         pygame.display.flip()
 
     pygame.quit()
