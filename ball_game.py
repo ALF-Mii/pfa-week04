@@ -32,31 +32,34 @@ EXIT_Y = 0
 # 5 hand-tuned climbs. Rules per layout: vertical steps <= ~100px
 # (jump reaches 160), horizontal gaps small, top platform near y~95,
 # second-highest at y>=170 so it can't trigger the exit by itself.
+# 5 stages of grief, laid out as one chained climb. Each stage's base
+# sits under the previous stage's exit (fly in at the same x), with:
+# top platform near y~95 (only it can exit), second-highest at y>=165,
+# vertical steps <=120px (jump reaches 160), and a weave to suit the mood.
 LEVELS = [
-    {"name": "First Steps",
+    {"name": "Denial",  # safe and wide; everything is fine
      "platforms": [(60, 450, 200, 24), (330, 350, 200, 24),
                    (560, 250, 180, 24), (330, 170, 180, 24),
                    (90, 90, 180, 24)],
      "blocks": []},
-    {"name": "Zigzag",
-     "platforms": [(560, 455, 150, 24), (370, 360, 150, 24),
-                   (150, 265, 150, 24), (370, 175, 150, 24),
-                   (580, 95, 150, 24)],
+    {"name": "Anger",  # jagged zigzag with teeth to hop around
+     "platforms": [(80, 450, 200, 24), (350, 350, 150, 24),
+                   (580, 250, 140, 24), (350, 165, 150, 24),
+                   (120, 95, 150, 24)],
+     "blocks": [(300, 400, 36, 140), (520, 180, 36, 120)]},
+    {"name": "Bargaining",  # back-and-forth around a central block-step
+     "platforms": [(100, 450, 190, 24), (240, 385, 110, 24),
+                   (520, 270, 150, 24), (250, 180, 150, 24),
+                   (480, 95, 150, 24)],
+     "blocks": [(360, 330, 40, 120)]},
+    {"name": "Depression",  # sparse, heavy near-limit jumps, long falls
+     "platforms": [(480, 450, 190, 24), (200, 330, 130, 24),
+                   (500, 210, 130, 24), (220, 95, 130, 24)],
      "blocks": []},
-    {"name": "The Wall",
-     "platforms": [(60, 450, 140, 24), (240, 350, 140, 24),
-                   (60, 250, 140, 24), (250, 210, 140, 24),
-                   (450, 170, 140, 24), (600, 95, 130, 24)],
-     "blocks": [(380, 420, 40, 120)]},
-    {"name": "Skinny",
-     "platforms": [(80, 445, 120, 24), (300, 345, 120, 24),
-                   (520, 250, 120, 24), (300, 175, 120, 24),
-                   (90, 95, 120, 24)],
-     "blocks": [(500, 400, 36, 140)]},
-    {"name": "Summit",
-     "platforms": [(620, 450, 110, 24), (430, 350, 110, 24),
-                   (240, 260, 110, 24), (430, 180, 110, 24),
-                   (620, 95, 110, 24)],
+    {"name": "Acceptance",  # calm even staircase to the top
+     "platforms": [(200, 450, 170, 24), (450, 350, 160, 24),
+                   (200, 250, 160, 24), (450, 170, 160, 24),
+                   (200, 90, 150, 24)],
      "blocks": []},
 ]
 
