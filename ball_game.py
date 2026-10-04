@@ -97,6 +97,14 @@ def enter_from_above(x):
     return (max(CHAR_W / 2, min(WIDTH - CHAR_W / 2, x)), 30)
 
 
+def enter_from_below(x):
+    """Re-entry when jumping up a stage: fly in from the bottom edge.
+
+    Caller keeps the rising vy, so momentum carries straight through.
+    """
+    return (max(CHAR_W / 2, min(WIDTH - CHAR_W / 2, x)), HEIGHT + 30)
+
+
 def char_rect(x, y):
     """Collision box for feet-anchored position (x, y)."""
     return pygame.Rect(x - CHAR_W / 2, y - CHAR_H, CHAR_W, CHAR_H)
@@ -265,16 +273,16 @@ def main():
             vy = 0.0
             on_ground = True
 
-        # exit past the top edge -> next stage, starting on its base
+        # exit past the top edge -> fly into the next stage from below
+        # with position and upward momentum kept; land it yourself
         if y < EXIT_Y:
             level_idx += 1
             if level_idx >= len(LEVELS):
                 won = True
             else:
                 load_level(level_idx)
-                (x, y) = stage_spawn(level_idx)
-                vy = 0.0
-                on_ground = True
+                (x, y) = enter_from_below(x)
+                on_ground = False
 
         # no floor past stage 1: fall out the bottom -> previous stage
         if not won and level_idx > 0 and y - CHAR_H > HEIGHT:
