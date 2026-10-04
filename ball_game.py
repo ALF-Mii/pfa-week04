@@ -77,18 +77,18 @@ LEVELS = [
                    (90, 90, 180, 24)],
      "blocks": []},
     # -- Stage 2: Anger ----------------------------------------------------
-    # Jagged zigzag; the two X teeth jut into jump arcs, hop around them.
+    # Jagged zigzag; one X tooth juts under the mid jump, hop around it.
     # 100|            ###############
-    # 160|                                   ###############      XXXX (180)
-    # 240|                                                    XXXX  ##############
-    # 340|                                   ###############
+    # 160|                                   ###############
+    # 240|                                                          ##############
+    # 360|                                   ###############
     # 400|                              XXXX (to y540)
     # 440|        ####################  XXXX
     {"name": "Anger",
      "platforms": [(80, 450, 200, 24), (350, 350, 150, 24),
                    (580, 250, 140, 24), (350, 165, 150, 24),
                    (120, 95, 150, 24)],
-     "blocks": [(300, 400, 36, 140), (520, 180, 36, 120)]},
+     "blocks": [(300, 400, 36, 140)]},
     # -- Stage 3: Bargaining -----------------------------------------------
     # Weave back and forth; the central XXXX doubles as a stepping stone.
     # 100|                                                ###############
