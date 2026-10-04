@@ -47,27 +47,79 @@ WALL_SPENT = (60, 70, 90)
 # sits under the previous stage's exit (fly in at the same x), with:
 # top platform near y~95 (only it can exit), second-highest at y>=165,
 # vertical steps <=120px (jump reaches 160), and a weave to suit the mood.
+# ---------------------------------------------------------------------------
+# STAGE GEOMETRY — how to tweak the climb.
+#
+# Screen: 800x600, ground line y=540 (stage 1 only). Each entry is a tuple:
+#     platform: (x, y, w, h) = TOP-LEFT corner, width, thickness
+#     block:    (x, y, w, h) = solid wall, jumped around / latched past
+# Character: 36 wide, 90 tall. Physics limits to respect:
+#     rise per jump .... max 160px, comfy <= 110 (Depression pushes ~120)
+#     horizontal reach . ~300px per jump at full run speed
+#     top platform ..... top edge near y=90  (only it can exit past y=0)
+#     second-highest ... top edge at y>=165 (can't exit by itself)
+#     chain rule ....... each base platform sits under the previous
+#                        stage's exit, so the fly-through always has
+#                        something to catch (see "overlap" test).
+# ASCII maps below are 1 char = 10x20px: '#' = platform, 'X' = block.
+# ---------------------------------------------------------------------------
 LEVELS = [
-    {"name": "Denial",  # safe and wide; everything is fine
+    # -- Stage 1: Denial ---------------------------------------------------
+    # Safe and wide; everything is fine. Route: base -> mid -> top.
+    #  80|         ##################
+    # 160|                                 ##################
+    # 240|                                                        ##################
+    # 340|                                 ####################
+    # 440|      ####################
+    {"name": "Denial",
      "platforms": [(60, 450, 200, 24), (330, 350, 200, 24),
                    (560, 250, 180, 24), (330, 170, 180, 24),
                    (90, 90, 180, 24)],
      "blocks": []},
-    {"name": "Anger",  # jagged zigzag with teeth to hop around
+    # -- Stage 2: Anger ----------------------------------------------------
+    # Jagged zigzag; the two X teeth jut into jump arcs, hop around them.
+    # 100|            ###############
+    # 160|                                   ###############      XXXX (180)
+    # 240|                                                    XXXX  ##############
+    # 340|                                   ###############
+    # 400|                              XXXX (to y540)
+    # 440|        ####################  XXXX
+    {"name": "Anger",
      "platforms": [(80, 450, 200, 24), (350, 350, 150, 24),
                    (580, 250, 140, 24), (350, 165, 150, 24),
                    (120, 95, 150, 24)],
      "blocks": [(300, 400, 36, 140), (520, 180, 36, 120)]},
-    {"name": "Bargaining",  # back-and-forth around a central block-step
+    # -- Stage 3: Bargaining -----------------------------------------------
+    # Weave back and forth; the central XXXX doubles as a stepping stone.
+    # 100|                                                ###############
+    # 180|                         ###############
+    # 260|                                                    ###############
+    # 320|                                    XXXX (to y450)
+    # 380|                        ########### XXXX
+    # 440|          ###################
+    {"name": "Bargaining",
      "platforms": [(100, 450, 190, 24), (240, 385, 110, 24),
                    (520, 270, 150, 24), (250, 180, 150, 24),
                    (480, 95, 150, 24)],
      "blocks": [(360, 330, 40, 120)]},
-    {"name": "Depression",  # sparse, heavy near-limit jumps, long falls
+    # -- Stage 4: Depression -----------------------------------------------
+    # Four lonely platforms, near-limit rises, long falls between.
+    # 100|                      #############
+    # 200|                                                  #############
+    # 320|                    #############
+    # 440|                                                ###################
+    {"name": "Depression",
      "platforms": [(480, 450, 190, 24), (200, 330, 130, 24),
                    (500, 210, 130, 24), (220, 95, 130, 24)],
      "blocks": []},
-    {"name": "Acceptance",  # calm even staircase to the top
+    # -- Stage 5: Acceptance -----------------------------------------------
+    # Calm even staircase, alternating sides all the way up.
+    #  80|                    ###############
+    # 160|                                             ################
+    # 240|                    ################
+    # 340|                                             ################
+    # 440|                    #################
+    {"name": "Acceptance",
      "platforms": [(200, 450, 170, 24), (450, 350, 160, 24),
                    (200, 250, 160, 24), (450, 170, 160, 24),
                    (200, 90, 150, 24)],
