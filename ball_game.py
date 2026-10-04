@@ -131,6 +131,14 @@ LEVELS = [
                    (200, 250, 160, 24), (450, 170, 160, 24),
                    (200, 90, 150, 24)],
      "blocks": []},
+    # -- Stage 6: Victory --------------------------------------------------
+    # The dance floor. Fly in from Acceptance, celebrate 45s while the game
+    # keeps running underneath, then the window closes. Falling off drops
+    # you back to Acceptance (climb back up to restart the 45s).
+    # 440|                         ####################
+    {"name": "Victory",
+     "platforms": [(250, 450, 200, 24)],
+     "blocks": []},
 ]
 
 # Active solid geometry; rebuilt by load_level().
@@ -410,7 +418,7 @@ def main():
     latched = False
     latch_t = 0.0
     latch_dir = 0
-    won = False
+    celebrating = False
     win_start = 0
     confetti = []
 
@@ -423,39 +431,6 @@ def main():
                 running = False
 
         keys = pygame.key.get_pressed()
-        if won:
-            now = pygame.time.get_ticks()
-            if keys[pygame.K_r]:
-                level_idx = 0
-                x, y = load_level(0)
-                x, y = stage_spawn(0)
-                vy = 0.0
-                on_ground = True
-                latch_ready = True
-                latched = False
-                push_t = 0.0
-                won = False
-                continue
-            if win_time_left_ms(win_start, now) <= 0:
-                running = False
-                continue
-            step_confetti(confetti, dt)
-            screen.fill((15, 15, 25))
-            draw_confetti(screen, confetti)
-            if (now // 400) % 2 == 0:  # flashing red, ~1.25 Hz
-                msg = win_font.render("VICTORY", True, (255, 45, 45))
-                screen.blit(msg,
-                            msg.get_rect(center=(WIDTH / 2, HEIGHT / 2 - 20)))
-            sub = hud.render("Acceptance reached - R to climb again",
-                             True, (200, 200, 200))
-            screen.blit(sub, sub.get_rect(center=(WIDTH / 2, HEIGHT / 2 + 60)))
-            left_s = win_time_left_ms(win_start, now) // 1000
-            timer = hud.render("Closing in %ds..." % left_s, True,
-                               (150, 150, 150))
-            screen.blit(timer, timer.get_rect(center=(WIDTH / 2,
-                                                       HEIGHT / 2 + 100)))
-            pygame.display.flip()
-            continue
 
         vx = 0.0
         left = keys[pygame.K_LEFT] or keys[pygame.K_a]
@@ -496,28 +471,35 @@ def main():
                 on_ground = True
 
         # exit past the top edge -> fly into the next stage from below
-        # with position and upward momentum kept; land it yourself
+        # with position and upward momentum kept; land it yourself.
+        # Entering the Victory stage starts the 45s celebration.
         if y < EXIT_Y:
-            level_idx += 1
-            if level_idx >= len(LEVELS):
-                won = True
-                win_start = pygame.time.get_ticks()
-                confetti = [spawn_confetti() for _ in range(CONFETTI_N)]
-            else:
+            if level_idx + 1 < len(LEVELS):
+                level_idx += 1
                 load_level(level_idx)
                 (x, y) = enter_from_below(x)
                 on_ground = False
-                latch_ready = True
-                latched = False
-                push_t = 0.0
+                if level_idx == len(LEVELS) - 1:
+                    celebrating = True
+                    win_start = pygame.time.get_ticks()
+                    confetti = [spawn_confetti()
+                                for _ in range(CONFETTI_N)]
+            else:  # unreachable by physics; bounce back down safely
+                y = EXIT_Y + 50
+                vy = abs(vy)
+            latch_ready = True
+            latched = False
+            push_t = 0.0
 
         # no floor past stage 1: fall out the bottom -> previous stage
-        if not won and level_idx > 0 and y - CHAR_H > HEIGHT:
+        # (leaving Victory cancels the celebration timer)
+        if level_idx > 0 and y - CHAR_H > HEIGHT:
             level_idx -= 1
             load_level(level_idx)
             (x, y) = enter_from_above(x)
             vy = 0.0
             on_ground = False
+            celebrating = False
             latch_ready = True
             latched = False
             push_t = 0.0
@@ -561,7 +543,8 @@ def main():
         draw_character(screen, x, y, facing, phase if amp > 0.05 else 0.0,
                        latch_dir if latched else 0)
         lvl = LEVELS[level_idx]
-        tag = hud.render("Stage %d/5 - %s" % (level_idx + 1, lvl["name"]),
+        tag = hud.render("Stage %d/%d - %s"
+                         % (level_idx + 1, len(LEVELS), lvl["name"]),
                          True, (200, 200, 200))
         screen.blit(tag, (12, 10))
         bounce_hint = hud.render("Hold into a wall to latch - SPACE springs off",
@@ -571,6 +554,21 @@ def main():
             hint = hud.render("No floor - falling drops a stage!",
                               True, (230, 170, 120))
             screen.blit(hint, (12, 70))
+        if celebrating:
+            now = pygame.time.get_ticks()
+            if win_time_left_ms(win_start, now) <= 0:
+                running = False
+            step_confetti(confetti, dt)
+            draw_confetti(screen, confetti)
+            if (now // 400) % 2 == 0:  # flashing red, ~1.25 Hz
+                msg = win_font.render("VICTORY", True, (255, 45, 45))
+                screen.blit(msg,
+                            msg.get_rect(center=(WIDTH / 2, HEIGHT / 2 - 20)))
+            left_s = win_time_left_ms(win_start, now) // 1000
+            timer = hud.render("Closing in %ds..." % left_s, True,
+                               (235, 235, 235))
+            screen.blit(timer, timer.get_rect(center=(WIDTH / 2,
+                                                       HEIGHT / 2 + 60)))
         pygame.display.flip()
 
     pygame.quit()
