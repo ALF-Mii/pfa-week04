@@ -30,10 +30,12 @@ DARK = (40, 35, 35)
 EXIT_Y = 0
 
 # Wall bounce: leaning into a screen edge mid-air grants one bonus jump
-# per airtime, then shoves you off the wall. Glowing edges = ready.
+# per airtime, then shoves you off the wall. The shove beats run speed so
+# the arc leaves the wall even while still holding toward it.
+# Glowing edges = ready.
 WALL_W = 10
-WALL_PUSH_SPEED = 350.0
-WALL_PUSH_TIME = 0.2
+WALL_PUSH_SPEED = 600.0
+WALL_PUSH_TIME = 0.25
 WALL_READY = (120, 220, 255)
 WALL_SPENT = (60, 70, 90)
 
@@ -133,6 +135,17 @@ def try_wall_bounce(on_ground, wall_dir, pressing_toward, ready):
     if not on_ground and wall_dir != 0 and pressing_toward and ready:
         return True, JUMP_VELOCITY
     return False, None
+
+
+def bounce_push(push_t, push_dir, dt):
+    """Wall-bounce shove: (vx_bonus, new_push_t).
+
+    Stronger than MOVE_SPEED, so the bounce arcs away from the wall
+    even if the player keeps holding toward it.
+    """
+    if push_t > 0:
+        return push_dir * WALL_PUSH_SPEED, max(0.0, push_t - dt)
+    return 0.0, push_t
 
 
 def draw_walls(screen, bounce_ready, tick):
@@ -307,9 +320,8 @@ def main():
         if right:
             vx = MOVE_SPEED
             facing = 1
-        if push_t > 0:
-            vx += push_dir * WALL_PUSH_SPEED
-            push_t -= dt
+        bonus, push_t = bounce_push(push_t, push_dir, dt)
+        vx += bonus
         if (keys[pygame.K_SPACE] or keys[pygame.K_w]
                 or keys[pygame.K_UP]) and on_ground:
             vy = JUMP_VELOCITY
